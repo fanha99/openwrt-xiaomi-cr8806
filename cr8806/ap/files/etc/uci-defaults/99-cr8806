@@ -1,0 +1,45 @@
+#!/bin/sh
+# Dumb AP: ca 4 cong (lan1-3 + wan) chung br-lan, xoa interface wan/wan6.
+# Khong firewall/NAT. IP quan tri: 192.168.2.1/24 (doi trong LuCI:
+# Network > Interfaces > lan).
+# dnsmasq cap DHCP .150-.199 de cau hinh lan dau qua WiFi/day khi chua cam vao
+# mang. Khi khoi dong, dnsmasq thu DHCP tren br-lan: neu da co router chinh cap
+# DHCP thi tu tat DHCP cua minh (dhcp.lan.force=0, mac dinh). Chi kiem tra luc
+# khoi dong -> cam vao mang chinh roi thi reboot, hoac tat han trong LuCI
+# (Network > Interfaces > lan > DHCP Server > Ignore interface).
+
+# Chi chay 1 lan: sysupgrade giu config thi khong ghi de cau hinh cua ban.
+[ -n "$(uci -q get system.@system[0].dumb_ap)" ] && exit 0
+
+. /lib/functions.sh
+
+brdev=""
+check_dev() { [ "$(uci -q get network.$1.name)" = "br-lan" ] && brdev="$1"; }
+config_load network
+config_foreach check_dev device
+
+if [ -n "$brdev" ]; then
+	uci -q del_list network.$brdev.ports='wan'
+	uci add_list network.$brdev.ports='wan'
+fi
+uci set network.lan.ipaddr='192.168.2.1'
+uci set network.lan.netmask='255.255.255.0'
+uci -q delete network.wan
+uci -q delete network.wan6
+
+uci -q get dhcp.lan >/dev/null || uci set dhcp.lan=dhcp
+uci set dhcp.lan.interface='lan'
+uci set dhcp.lan.start='150'
+uci set dhcp.lan.limit='50'
+uci set dhcp.lan.leasetime='12h'
+uci -q delete dhcp.lan.force
+uci -q delete dhcp.lan.dhcpv6
+uci -q delete dhcp.lan.ra
+uci -q delete dhcp.wan
+
+uci set system.@system[0].hostname='CR8806-AP'
+uci set system.@system[0].dumb_ap='ap'
+uci commit network
+uci commit dhcp
+uci commit system
+exit 0

@@ -1,17 +1,6 @@
 CONFIG_TARGET_qualcommax=y
 CONFIG_TARGET_qualcommax_ipq50xx=y
 CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_xiaomi_cr8806=y
-# --- Router toi thieu (mac dinh van dung duoc lam AP) ---
-CONFIG_PACKAGE_dnsmasq=y
-CONFIG_PACKAGE_firewall4=y
-CONFIG_PACKAGE_kmod-nft-offload=y
-CONFIG_PACKAGE_luci-app-firewall=y
-CONFIG_PACKAGE_ppp=y
-CONFIG_PACKAGE_ppp-mod-pppoe=y
-CONFIG_PACKAGE_luci-proto-ppp=y
-CONFIG_PACKAGE_odhcpd-ipv6only=y
-CONFIG_PACKAGE_luci-proto-ipv6=y
-CONFIG_PACKAGE_irqbalance=y
 # --- Khong can USB/ext4 tren AP ---
 # CONFIG_PACKAGE_kmod-usb3 is not set
 # CONFIG_PACKAGE_kmod-usb-dwc3 is not set

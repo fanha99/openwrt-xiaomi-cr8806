@@ -1,5 +1,5 @@
 #!/bin/sh
-# Router toi thieu, dung lam AP cung duoc:
+# Router toi thieu (firewall4/NAT), dung lam AP cung duoc:
 # - lan (br-lan: lan1-3): 192.168.2.1/24, dnsmasq cap DHCP .150-.199
 #   (doi trong LuCI: Network > Interfaces > lan).
 # - wan (br-wan: cong wan): DHCP client (doi sang PPPoE trong LuCI neu can),
@@ -53,8 +53,8 @@ uci set dhcp.wan.ignore='1'
 uci -q set firewall.@defaults[0].flow_offloading='1'
 uci -q set irqbalance.irqbalance.enabled='1'
 
-uci set system.@system[0].hostname='CR8806-AP'
-uci set system.@system[0].dumb_ap='3'
+uci set system.@system[0].hostname='CR8806'
+uci set system.@system[0].dumb_ap='router'
 uci commit network
 uci commit dhcp
 uci commit firewall

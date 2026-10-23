@@ -1,0 +1,11 @@
+# --- Router toi thieu: firewall4/NAT, PPPoE, IPv6, DHCP ---
+CONFIG_PACKAGE_dnsmasq=y
+CONFIG_PACKAGE_firewall4=y
+CONFIG_PACKAGE_kmod-nft-offload=y
+CONFIG_PACKAGE_luci-app-firewall=y
+CONFIG_PACKAGE_ppp=y
+CONFIG_PACKAGE_ppp-mod-pppoe=y
+CONFIG_PACKAGE_luci-proto-ppp=y
+CONFIG_PACKAGE_odhcpd-ipv6only=y
+CONFIG_PACKAGE_luci-proto-ipv6=y
+CONFIG_PACKAGE_irqbalance=y

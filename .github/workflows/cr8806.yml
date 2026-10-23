@@ -2,6 +2,7 @@ name: CR8806 build
 
 # Chay tay (Actions > CR8806 build > Run workflow) -> chi build, file nam trong
 # Artifacts cua lan chay. Push tag cr8806-* -> build va tao GitHub Release.
+# Ban ap va router build song song tren 2 may ao.
 on:
   workflow_dispatch:
   push:
@@ -15,6 +16,10 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [ap, router]
 
     steps:
       - name: Free disk space
@@ -38,35 +43,59 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dl
-          key: dl-${{ hashFiles('cr8806/diffconfig', 'include/kernel-*') }}
+          key: dl-${{ matrix.variant }}-${{ hashFiles('cr8806/**/diffconfig', 'include/kernel-*') }}
           restore-keys: dl-
 
       - name: Build
-        run: ./cr8806/build.sh
-
-      - name: Collect images
-        run: |
-          mkdir out
-          cd bin/targets/qualcommax/ipq50xx
-          cp *cr8806* ../../../../out/
-          cd ../../../../out
-          sha256sum * > sha256sums
-          cat sha256sums
+        run: ./cr8806/build.sh ${{ matrix.variant }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cr8806-${{ github.sha }}
-          path: out/*
+          name: cr8806-${{ matrix.variant }}
+          path: bin/cr8806/${{ matrix.variant }}/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/cr8806-')
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download images
+        uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: false
+
+      - name: Merge checksums
+        run: |
+          cd out
+          cat cr8806-*/sha256sums > sha256sums
+          rm cr8806-*/sha256sums
+          cat sha256sums
 
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/cr8806-')
         uses: softprops/action-gh-release@v2
         with:
-          files: out/*
+          files: |
+            out/cr8806-*/*
+            out/sha256sums
           body: |
             OpenWrt cho Xiaomi CR8806 (M79), commit ${{ github.sha }}.
             Cach cai dat va kiem tra: xem cr8806/README.md.
-            - initramfs-uImage.itb: boot thu qua TFTP (khong ghi flash)
-            - squashfs-factory.ubi: ghi vao slot rootfs / rootfs_1 tu firmware Xiaomi
-            - squashfs-sysupgrade.bin: nang cap tu OpenWrt dang chay
+
+            Hai ban (chon 1):
+            - `xiaomi_cr8806-ap-*`: dumb AP. Ca 4 cong chung br-lan, khong firewall/NAT.
+              dnsmasq cap DHCP de cau hinh lan dau, tu tat khi da co router chinh.
+              Nhieu RAM trong nhat.
+            WiFi bat san: CR8806 / CR8806-5G, mat khau cr8806setup.
+            - `xiaomi_cr8806-router-*`: router toi thieu. lan1-3 = LAN (DHCP .150-.199),
+              wan = br-wan (DHCP/PPPoE), firewall4 + NAT, IPv6.
+
+            Moi ban co 3 file:
+            - `initramfs-uImage.itb`: boot thu qua TFTP (khong ghi flash)
+            - `squashfs-factory.ubi`: ghi vao slot rootfs / rootfs_1 tu firmware Xiaomi
+            - `squashfs-sysupgrade.bin`: nang cap tu OpenWrt dang chay
+              (doi tu ban nay sang ban kia: dung `sysupgrade -n`)
+
+            IP quan tri: 192.168.2.1, user root, chua co mat khau.

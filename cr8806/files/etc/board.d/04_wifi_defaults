@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# WiFi bat san o lan boot dau de cau hinh qua WiFi (OpenWrt mac dinh tat WiFi).
+# Chi dung khi /etc/config/wireless chua co (cai moi / sysupgrade -n).
+# Doi SSID/mat khau trong LuCI: Network > Wireless.
+
+. /lib/functions/uci-defaults.sh
+
+board_config_update
+
+case "$(board_name)" in
+xiaomi,cr8806)
+	ucidef_set_country 'VN'
+	ucidef_set_wireless 2g 'CR8806' 'psk2' 'cr8806setup'
+	ucidef_set_wireless 5g 'CR8806-5G' 'psk2' 'cr8806setup'
+	;;
+esac
+
+board_config_flush
+
+exit 0

@@ -11,20 +11,55 @@ Ghi chép lại toàn bộ những gì đã tìm hiểu, sửa và tạo ra đ�
 - Bám theo OpenWrt upstream để nhận bản sửa lỗi.
 - Giữ cơ chế dual-boot (rootfs / rootfs_1) của Xiaomi.
 
-### Bố trí mạng (từ 2026-10-23)
+### Hai bản build (từ 2026-10-23)
+
+Cùng kernel/DTS/WiFi, chỉ khác gói và cấu hình mạng lần boot đầu. File ảnh có tên
+`...-xiaomi_cr8806-ap-...` hoặc `...-xiaomi_cr8806-router-...`.
+
+**`ap` – dumb AP** (RAM trống nhiều nhất, ≈45 MB khi bật 2 AP)
 
 | Network | Bridge | Cổng | IP | DHCP |
 |---|---|---|---|---|
-| `lan` (quản trị) | `br-lan` | lan1, lan2, lan3 (+ WiFi mặc định) | tĩnh 192.168.2.1/24 | dnsmasq cấp .150–.199 |
-| `wan` (uplink) | `br-wan` | wan | DHCP client từ router chính | không cấp (`dhcp.wan.ignore=1`) |
+| `lan` | `br-lan` | lan1, lan2, lan3, wan (+ WiFi) | tĩnh 192.168.2.1/24 | dnsmasq .150–.199, tự tắt nếu đã có DHCP server |
 
-- Không firewall/NAT, **IP forwarding tắt** (`/etc/sysctl.d/99-dumb-ap.conf`): máy không
-  route giữa lan và wan. Client trên `br-lan` nhận IP nhưng **không có Internet**.
-- Muốn client WiFi dùng mạng/Internet của router chính: LuCI → Network → Wireless →
-  Edit SSID → *Network* chọn `wan` (bỏ `lan`) → Save & Apply. Client nhận IP từ router chính.
-- LuCI/SSH truy cập được từ cả 2 phía: 192.168.2.1 (lan) và IP DHCP của `wan` (xem trong
-  LuCI hoặc trong danh sách DHCP của router chính). **Đặt mật khẩu root** (System →
-  Administration) trước khi cắm vào mạng chính.
+- Không firewall/NAT, odhcpd, ppp. Cắm cổng bất kỳ vào router chính, client WiFi/LAN
+  nhận IP từ router chính.
+- Giữ dnsmasq để **cấu hình lần đầu qua WiFi** (chưa cắm dây): kết nối SSID mặc định
+  `OpenWrt`, nhận IP 192.168.2.15x, vào http://192.168.2.1.
+- Chống tranh DHCP với router chính: lúc khởi động, dnsmasq thử xin DHCP trên `br-lan`;
+  nếu đã có DHCP server thì **không cấp DHCP**. Chỉ kiểm tra lúc khởi động, nên sau khi cắm
+  vào mạng chính phải **reboot** AP, hoặc tắt hẳn: LuCI → Network → Interfaces → lan →
+  DHCP Server → *Ignore interface* (khuyên dùng khi đã triển khai xong).
+- Quản trị: 192.168.2.1. Router chính thường ở dải khác, nên PC phải đặt IP tĩnh trong
+  192.168.2.x để vào LuCI, hoặc đổi IP lan của AP sang IP tĩnh thuộc dải của router chính
+  (LuCI: Network > Interfaces > lan).
+
+**`router` – router tối thiểu** (≈30 MB trống khi bật 2 AP)
+
+| Network | Bridge | Cổng | IP | DHCP |
+|---|---|---|---|---|
+| `lan` | `br-lan` | lan1, lan2, lan3 (+ WiFi) | tĩnh 192.168.2.1/24 | dnsmasq cấp .150–.199 |
+| `wan` | `br-wan` | wan | DHCP client (đổi sang PPPoE trong LuCI) | không cấp (`dhcp.wan.ignore=1`) |
+
+- firewall4 + NAT (flow offload phần mềm), PPPoE, IPv6 (wan6 DHCPv6, odhcpd), irqbalance.
+  Không UPnP, không DDNS.
+- Dùng làm AP: cắm wan vào router chính, LuCI → Network → Wireless → Edit SSID →
+  *Network* chọn `wan` → Save & Apply.
+
+Cả 2 bản: **WiFi bật sẵn** ở lần boot đầu để cấu hình không cần dây (OpenWrt gốc tắt WiFi):
+
+| Băng | SSID | Mật khẩu (WPA2) |
+|---|---|---|
+| 2.4 GHz | `CR8806` | `cr8806setup` |
+| 5 GHz | `CR8806-5G` | `cr8806setup` |
+
+Quốc gia `VN`. Kết nối xong vào http://192.168.2.1, **đổi SSID/mật khẩu** (Network →
+Wireless). Mặc định chỉ áp dụng khi chưa có `/etc/config/wireless` (cài mới hoặc
+`sysupgrade -n`).
+
+Cả 2 bản: **đặt mật khẩu root** (System → Administration) trước khi cắm vào mạng chính.
+Đổi từ bản này sang bản kia bằng `sysupgrade -n` (không giữ config), vì script cấu hình
+lần đầu chỉ chạy khi chưa có `system.@system[0].dumb_ap`.
 
 ## 2. Phần cứng (đã xác minh từ backup flash của 1 máy thật)
 
@@ -110,13 +145,16 @@ mtd20 overlay, mtd21 data
 
 | File | Mục đích |
 |---|---|
-| `diffconfig` | Cấu hình dumb AP: giữ dnsmasq; bỏ firewall4, nftables, odhcpd, ppp, USB, ext4; LuCI tối giản (luci-mod-admin-full + bootstrap, tiếng Anh) |
-| `files/etc/uci-defaults/99-dumb-ap` | Lần boot đầu: `br-lan` = lan1-3, IP 192.168.2.1, DHCP .150–.199; `br-wan` = wan, interface `wan` DHCP client, xoá wan6; hostname `CR8806-AP`. Đánh dấu `system.@system[0].dumb_ap` (=2) để không chạy lại khi sysupgrade giữ config |
-| `files/etc/sysctl.d/99-dumb-ap.conf` | Tắt IPv4/IPv6 forwarding (không có firewall) |
-| `build.sh` | feeds update/install → copy `files/` + `diffconfig` → `make defconfig` → build |
+| `diffconfig` | Phần chung: target, ath11k-smallbuffers, wpad-basic-mbedtls, LuCI tối giản (luci-mod-admin-full + bootstrap, tiếng Anh); bỏ USB, ext4 |
+| `files/etc/board.d/04_wifi_defaults` | Chung cả 2 bản: WiFi bật sẵn, SSID `CR8806` / `CR8806-5G`, WPA2 `cr8806setup`, country VN (qua `ucidef_set_wireless`) |
+| `ap/diffconfig` | Bản AP: giữ dnsmasq; bỏ firewall4, nftables, kmod-nft-offload, odhcpd, ppp |
+| `ap/files/etc/uci-defaults/99-cr8806` | Lần boot đầu: wan vào `br-lan`, xoá wan/wan6, IP 192.168.2.1, DHCP .150–.199 (tự tắt nếu đã có DHCP server), hostname `CR8806-AP`, đánh dấu `dumb_ap=ap` |
+| `router/diffconfig` | Bản router: dnsmasq, firewall4, kmod-nft-offload, luci-app-firewall, ppp/pppoe, odhcpd, luci-proto-ipv6, irqbalance |
+| `router/files/etc/uci-defaults/99-cr8806` | Lần boot đầu: `br-lan` = lan1-3, `br-wan` = wan, wan DHCP + wan6, DHCP .150–.199, flow offload, irqbalance, hostname `CR8806`, đánh dấu `dumb_ap=router` |
+| `build.sh` | `build.sh [ap] [router]` (mặc định cả 2): feeds → ghép `diffconfig` chung + của bản → `make defconfig` → clean mac80211 → build → copy vào `bin/cr8806/<bản>/` |
 | `update-upstream.sh` | `git fetch` + `git rebase origin/main` để nhận bản vá upstream |
 
-IP quản trị mặc định: **192.168.2.1/24** (đặt trong `99-dumb-ap`, chỉ chạy ở lần boot đầu; đổi sau trong LuCI: Network > Interfaces > lan).
+IP quản trị mặc định: **192.168.2.1/24** (đặt trong `99-cr8806`, chỉ chạy ở lần boot đầu; đổi sau trong LuCI: Network > Interfaces > lan).
 
 ## 7. Build
 
@@ -128,18 +166,28 @@ sudo apt install build-essential clang flex bison g++ gawk gcc-multilib g++-mult
 cd ~/openwrt-cr8806
 # WSL: bỏ đường dẫn Windows (có dấu cách) khỏi PATH
 export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '^/mnt/' | paste -sd:)
-./cr8806/build.sh
+./cr8806/build.sh          # cả 2 bản (lần lượt ap rồi router)
+./cr8806/build.sh ap       # chỉ bản AP
+./cr8806/build.sh router   # chỉ bản router
 ```
 
-Kết quả: `bin/targets/qualcommax/ipq50xx/`
-- `openwrt-qualcommax-ipq50xx-xiaomi_cr8806-squashfs-factory.ubi` – flash lần đầu
-- `openwrt-qualcommax-ipq50xx-xiaomi_cr8806-squashfs-sysupgrade.bin` – nâng cấp
-  từ OpenWrt bản này về sau
+Trên một máy, 2 bản phải build **lần lượt** trong cùng cây source (cùng `.config`,
+`build_dir`). Toolchain dùng chung, nên bản thứ 2 chỉ build lại kernel, kmod và gói khác
+nhau (~15–30 phút). Muốn song song thật thì dùng GitHub Actions (mục 7.1).
+
+Kết quả: `bin/cr8806/ap/` và `bin/cr8806/router/`, mỗi thư mục có:
+- `openwrt-qualcommax-ipq50xx-xiaomi_cr8806-<bản>-initramfs-uImage.itb` – boot thử qua TFTP
+- `openwrt-qualcommax-ipq50xx-xiaomi_cr8806-<bản>-squashfs-factory.ubi` – flash lần đầu
+- `openwrt-qualcommax-ipq50xx-xiaomi_cr8806-<bản>-squashfs-sysupgrade.bin` – nâng cấp
+- `sha256sums`, `.manifest` (danh sách gói)
+
+`bin/targets/qualcommax/ipq50xx/` chỉ chứa bản build sau cùng.
 
 ### 7.1 Build trên GitHub Actions / tạo Release
 
 Workflow `.github/workflows/cr8806.yml` chạy `cr8806/build.sh` trên máy ảo của
-GitHub (ubuntu-24.04, 4 nhân). Lần đầu mất khoảng 2–3 giờ, giới hạn 6 giờ. Repo
+GitHub (ubuntu-24.04, 4 nhân). Bản `ap` và `router` build **song song** trên 2 máy ảo,
+mỗi bản khoảng 2–3 giờ, giới hạn 6 giờ. Repo
 public nên không tính phí.
 
 Chỉ build để thử (không tạo Release):
@@ -155,15 +203,16 @@ Build rồi tạo Release (tên tag phải bắt đầu bằng `cr8806-`):
 git tag cr8806-2026.10.23
 git push fork cr8806-2026.10.23
 ```
-Release gồm `initramfs-uImage.itb`, `squashfs-factory.ubi`, `squashfs-sysupgrade.bin`,
-`manifest`, `sha256sums`.
+Release gồm `.itb`, `factory.ubi`, `sysupgrade.bin`, `.manifest` của cả 2 bản và một
+file `sha256sums` chung.
 
 Upload bản build trên máy (không cần chờ GitHub build):
 ```bash
-cd bin/targets/qualcommax/ipq50xx
+cd bin/cr8806
+cat ap/sha256sums router/sha256sums > sha256sums
 gh release create cr8806-2026.10.23 -R fanha99/cr8806-dump-ap \
   --title "CR8806 2026.10.23" --notes "Xem cr8806/README.md" \
-  *cr8806* sha256sums
+  ap/*cr8806* router/*cr8806* sha256sums
 ```
 
 Repo này là bản copy của OpenWrt nên có sẵn các workflow upstream (Build Kernel,
@@ -332,6 +381,38 @@ reboot
 ```
 Về slot 2 (`rootfs_1`): dùng `flag_last_success 1`. Trong U-Boot: `setenv` 2 biến đó,
 rồi `saveenv`, `reset`.
+
+### 9.5 Chuyển từ bản hzyitc (swconfig) sang bản này
+
+Backup của bản hzyitc (kernel 5.x, NSS, **swconfig**) **không restore thẳng** được: bản này
+dùng **DSA** (`lan1`–`lan3`, `wan`, không còn `switch1`/`eth1.N`), đường dẫn WiFi cũng khác
+(`platform/soc@0/...`). Phải chuyển cấu hình mạng/WiFi sang dạng mới; các phần khác (hostname,
+múi giờ, DHCP, mật khẩu root, host key SSH) giữ nguyên được.
+
+Bảng đổi cổng (swconfig → DSA):
+
+| swconfig `switch1` | DSA |
+|---|---|
+| port 1, 2, 3 | `lan1`, `lan2`, `lan3` |
+| port 4 (LED `port_mask 0x10`) | `wan` |
+| port 5 (nối `eth0`) | không còn – `wan` dùng thẳng |
+| port 6 (CPU, `eth1`) | CPU, ngầm định |
+
+Ví dụ VLAN: `switch_vlan vid 68 ports '1t 2t 3 6t'` + `eth1.68` trong `br-lan` → 1 `bridge-vlan`
+trên `br-lan` (`lan1:t lan2:t lan3:u*`), interface dùng device `br-lan.68`. Nhiều VLAN thì
+`br-lan` chứa `lan1 lan2 lan3`, mỗi VLAN 1 `bridge-vlan`. WiFi gán `network` vào interface của
+VLAN nào thì netifd tự cho vào đúng VLAN đó (untagged). MAC riêng cho từng VLAN: thêm
+`config device` `type 8021q`, `ifname br-lan`, `vid N`, `macaddr ...` (đã thử: switch vẫn
+chuyển unicast tới MAC đó).
+
+Cách làm:
+1. Cài bản AP vào **slot đang không chạy** (9.2; trên ROM hzyitc dùng `fw_setenv`, kiểm tra
+   số mtd bằng `cat /proc/mtd`). Bản hzyitc vẫn còn ở slot kia để quay về (9.4).
+2. Boot lên bản AP (192.168.2.1, WiFi `CR8806`), chạy script cấu hình (uci/ghi file
+   `/etc/config/network`, `wireless`), `reboot`.
+3. Sau đó **Backup** trong LuCI để lần sau restore thẳng.
+
+Script cấu hình chứa mật khẩu WiFi/root → **không để trong repo**.
 
 ## 10. Kiểm tra sau khi khởi động
 
@@ -635,3 +716,13 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
   zone lan/wan(+wan6), flow offload, irqbalance/odhcpd/dnsmasq chạy, 2 AP lên.
 - RAM available ~30 MB khi bật 2 AP (bản AP-only trước đó ~45 MB). Tiến trình lớn nhất:
   hostapd ~3.5 MB, wpa_supplicant ~3.1 MB, netifd ~2.5 MB, rpcd ~2 MB.
+
+### 2026-10-23 – 2 bản build `ap` / `router`; WiFi bật sẵn
+- `build.sh [ap] [router]` build lần lượt (mặc định cả 2) → `bin/cr8806/<bản>/`;
+  GitHub Actions build song song (matrix).
+- Bản AP giữ dnsmasq để cấu hình lần đầu qua WiFi/dây; `board.d/04_wifi_defaults` bật sẵn
+  WiFi `CR8806`/`CR8806-5G` (psk2, VN) ở lần boot đầu.
+- Test bản AP trên máy thật (`sysupgrade -n`, r37647): 4 cổng trong `br-lan`, dnsmasq cấp
+  .150–.199 khi không có router chính, 2 AP lên, không firewall/odhcpd, RAM available ~37 MB.
+- Thử chuyển cấu hình 1 máy hzyitc (swconfig, 3 VLAN tagged + cổng wan riêng, 3 SSID, 5G
+  HE160 kênh 100) sang DSA theo 9.5: VLAN/WiFi/MAC đúng, 5G 160 MHz lên, RAM ~41 MB.
