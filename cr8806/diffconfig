@@ -1,8 +1,8 @@
 CONFIG_TARGET_qualcommax=y
 CONFIG_TARGET_qualcommax_ipq50xx=y
 CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_xiaomi_cr8806=y
-# --- Dumb AP: bo cac thanh phan router ---
-# CONFIG_PACKAGE_dnsmasq is not set
+# --- Dumb AP: bo firewall/NAT/PPP; giu dnsmasq (DHCP cho lan quan tri) ---
+CONFIG_PACKAGE_dnsmasq=y
 # CONFIG_PACKAGE_firewall4 is not set
 # CONFIG_PACKAGE_nftables is not set
 # CONFIG_PACKAGE_kmod-nft-offload is not set

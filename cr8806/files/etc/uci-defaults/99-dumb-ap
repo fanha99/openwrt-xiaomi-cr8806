@@ -1,26 +1,55 @@
 #!/bin/sh
-# Dumb AP: cong WAN gia nhap br-lan, xoa interface wan/wan6.
-# IP quan tri: 192.168.2.1/24 (doi trong LuCI: Network > Interfaces > lan).
+# Dumb AP:
+# - lan (br-lan: lan1-3): IP quan tri 192.168.2.1/24, dnsmasq cap DHCP .150-.199
+#   (doi trong LuCI: Network > Interfaces > lan).
+# - wan (br-wan: cong wan): DHCP client lay IP tu router chinh. Gan SSID vao
+#   network "wan" trong LuCI de client WiFi nhan IP/Internet tu router chinh.
+# Khong co firewall/NAT: may nay khong route giua lan va wan.
 
 # Chi chay 1 lan: sysupgrade giu config thi khong ghi de cau hinh cua ban.
-[ "$(uci -q get system.@system[0].dumb_ap)" = "1" ] && exit 0
+[ -n "$(uci -q get system.@system[0].dumb_ap)" ] && exit 0
+
+. /lib/functions.sh
 
 brdev=""
-check_dev() { [ "$(uci -q get network.$1.name)" = "br-lan" ] && brdev="$1"; }
-. /lib/functions.sh
+wandev=""
+check_dev() {
+	case "$(uci -q get network.$1.name)" in
+	br-lan) brdev="$1" ;;
+	br-wan) wandev="$1" ;;
+	esac
+}
 config_load network
 config_foreach check_dev device
 
-if [ -n "$brdev" ]; then
-	uci -q del_list network.$brdev.ports='wan'
-	uci add_list network.$brdev.ports='wan'
+[ -n "$brdev" ] && uci -q del_list network.$brdev.ports='wan'
+if [ -z "$wandev" ]; then
+	wandev=$(uci add network device)
+	uci set network.$wandev.name='br-wan'
+	uci set network.$wandev.type='bridge'
 fi
+uci -q del_list network.$wandev.ports='wan'
+uci add_list network.$wandev.ports='wan'
+
 uci set network.lan.ipaddr='192.168.2.1'
 uci set network.lan.netmask='255.255.255.0'
-uci -q delete network.wan
+uci set network.wan=interface
+uci set network.wan.device='br-wan'
+uci set network.wan.proto='dhcp'
 uci -q delete network.wan6
+
+uci -q get dhcp.lan >/dev/null || uci set dhcp.lan=dhcp
+uci set dhcp.lan.interface='lan'
+uci set dhcp.lan.start='150'
+uci set dhcp.lan.limit='50'
+uci set dhcp.lan.leasetime='12h'
+uci -q get dhcp.wan >/dev/null || uci set dhcp.wan=dhcp
+uci set dhcp.wan.interface='wan'
+uci set dhcp.wan.ignore='1'
+
 uci set system.@system[0].hostname='CR8806-AP'
-uci set system.@system[0].dumb_ap='1'
+uci set system.@system[0].dumb_ap='2'
 uci commit network
+uci commit dhcp
 uci commit system
 exit 0

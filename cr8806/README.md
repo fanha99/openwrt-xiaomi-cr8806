@@ -11,6 +11,21 @@ Ghi chép lại toàn bộ những gì đã tìm hiểu, sửa và tạo ra đ�
 - Bám theo OpenWrt upstream để nhận bản sửa lỗi.
 - Giữ cơ chế dual-boot (rootfs / rootfs_1) của Xiaomi.
 
+### Bố trí mạng (từ 2026-10-23)
+
+| Network | Bridge | Cổng | IP | DHCP |
+|---|---|---|---|---|
+| `lan` (quản trị) | `br-lan` | lan1, lan2, lan3 (+ WiFi mặc định) | tĩnh 192.168.2.1/24 | dnsmasq cấp .150–.199 |
+| `wan` (uplink) | `br-wan` | wan | DHCP client từ router chính | không cấp (`dhcp.wan.ignore=1`) |
+
+- Không firewall/NAT, **IP forwarding tắt** (`/etc/sysctl.d/99-dumb-ap.conf`): máy không
+  route giữa lan và wan. Client trên `br-lan` nhận IP nhưng **không có Internet**.
+- Muốn client WiFi dùng mạng/Internet của router chính: LuCI → Network → Wireless →
+  Edit SSID → *Network* chọn `wan` (bỏ `lan`) → Save & Apply. Client nhận IP từ router chính.
+- LuCI/SSH truy cập được từ cả 2 phía: 192.168.2.1 (lan) và IP DHCP của `wan` (xem trong
+  LuCI hoặc trong danh sách DHCP của router chính). **Đặt mật khẩu root** (System →
+  Administration) trước khi cắm vào mạng chính.
+
 ## 2. Phần cứng (đã xác minh từ backup flash của 1 máy thật)
 
 | Thành phần | Chi tiết |
@@ -95,8 +110,9 @@ mtd20 overlay, mtd21 data
 
 | File | Mục đích |
 |---|---|
-| `diffconfig` | Cấu hình dumb AP: bỏ dnsmasq, firewall4, nftables, odhcpd, ppp, USB, ext4; LuCI tối giản (luci-mod-admin-full + bootstrap, tiếng Anh) |
-| `files/etc/uci-defaults/99-dumb-ap` | Lần boot đầu: IP LAN 192.168.2.1, cho cổng `wan` vào `br-lan`, xoá interface wan/wan6, hostname `CR8806-AP`. Đánh dấu `system.@system[0].dumb_ap=1` để không chạy lại khi sysupgrade giữ config |
+| `diffconfig` | Cấu hình dumb AP: giữ dnsmasq; bỏ firewall4, nftables, odhcpd, ppp, USB, ext4; LuCI tối giản (luci-mod-admin-full + bootstrap, tiếng Anh) |
+| `files/etc/uci-defaults/99-dumb-ap` | Lần boot đầu: `br-lan` = lan1-3, IP 192.168.2.1, DHCP .150–.199; `br-wan` = wan, interface `wan` DHCP client, xoá wan6; hostname `CR8806-AP`. Đánh dấu `system.@system[0].dumb_ap` (=2) để không chạy lại khi sysupgrade giữ config |
+| `files/etc/sysctl.d/99-dumb-ap.conf` | Tắt IPv4/IPv6 forwarding (không có firewall) |
 | `build.sh` | feeds update/install → copy `files/` + `diffconfig` → `make defconfig` → build |
 | `update-upstream.sh` | `git fetch` + `git rebase origin/main` để nhận bản vá upstream |
 
@@ -279,8 +295,9 @@ rồi `saveenv`, `reset`.
 
 ## 10. Kiểm tra sau khi khởi động
 
-Đăng nhập: cắm PC vào cổng bất kỳ (lan1-3 hoặc wan đều là LAN), PC đặt IP tĩnh
-`192.168.2.100/24` (router không có DHCP server; cùng IP đã dùng cho TFTP ở 9.0), rồi:
+Đăng nhập: cắm PC vào lan1, lan2 hoặc lan3 (cổng wan là `br-wan`, nhận IP từ router chính).
+PC để DHCP (nhận 192.168.2.150–199) hoặc IP tĩnh `192.168.2.100/24` (cùng IP đã dùng
+cho TFTP ở 9.0). Initramfs/bản build trước 2026-10-23 không có DHCP: phải đặt IP tĩnh. Rồi:
 ```sh
 ssh root@192.168.2.1
 ```
@@ -316,9 +333,13 @@ ip addr show br-lan
 ```
 → có dòng `inet 192.168.2.1/24`.
 ```sh
-ls /sys/class/net/br-lan/brif
+ls /sys/class/net/br-lan/brif /sys/class/net/br-wan/brif
 ```
-→ `lan1  lan2  lan3  wan`.
+→ `br-lan`: `lan1  lan2  lan3` (+ `phy*-ap0` khi bật WiFi); `br-wan`: `wan`.
+```sh
+ifstatus wan | grep -A2 ipv4-address
+```
+→ khi cổng wan cắm vào router chính: có IP do router chính cấp.
 ```sh
 dmesg | grep -iE 'qca8k|link is up'
 ```
@@ -329,7 +350,7 @@ cat /sys/class/net/eth0/address /sys/class/net/eth1/address
 → MAC lấy từ ART (giống MAC0/MAC1 U-Boot in ra lúc boot, dạng `d4:35:38:...`),
 không phải MAC ngẫu nhiên.
 
-Thử cắm dây lần lượt vào từng cổng lan1, lan2, lan3, wan, mỗi lần chạy:
+Thử cắm PC lần lượt vào từng cổng lan1, lan2, lan3, mỗi lần chạy:
 ```sh
 ping -c 3 192.168.2.100
 ```
@@ -542,3 +563,16 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
 - Sửa `platform.sh` (sysupgrade): đặt `flag_last_success=<slot>` và `flag_ota_reboot=0`
   (trước đây đặt `flag_boot_rootfs` – vô tác dụng; nếu env còn `flag_ota_reboot=1` thì
   sau sysupgrade U-Boot sẽ boot nhầm slot kia). README mục 9.2–9.4 viết lại theo logic này.
+
+### 2026-10-23 – sysupgrade OK; thêm dnsmasq, tách `br-wan`
+- Test sysupgrade (giữ config) bằng bản có `platform.sh` mới, cố ý đặt `flag_ota_reboot=1`
+  trước: sau ~90 s boot lại đúng `rootfs`, `flag_ota_reboot` được xoá về 0, cấu hình WiFi
+  và hostname còn nguyên.
+- Theo yêu cầu: image có sẵn **dnsmasq**; cổng **wan tách ra `br-wan`** (interface `wan`
+  DHCP client), `br-lan` = lan1-3 với DHCP .150–.199 (tránh .100 của PC/TFTP).
+- Tắt IP forwarding (`/etc/sysctl.d/99-dumb-ap.conf`) vì không có firewall: trước đó
+  `net.ipv4.ip_forward=1` (mặc định OpenWrt) → máy sẽ route lan↔wan không lọc, không NAT.
+- Test bằng `sysupgrade -n` (cấu hình mới hoàn toàn): `br-lan`=lan1-3, `br-wan`=wan,
+  dnsmasq chạy, `dhcp.wan.ignore=1`, RAM available ~58 MB (chưa WiFi), ~45 MB (2 AP bật).
+- Lưu ý: máy đã cài bản cũ (`dumb_ap=1`) khi sysupgrade giữ config sẽ **không** tự đổi sang
+  bố trí mới – sửa trong LuCI hoặc sysupgrade không giữ config.
