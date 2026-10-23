@@ -133,7 +133,7 @@ thêm lại mục `xiaomi,cr8806`.
 
 ### 9.0 Chuẩn bị TFTP (cho 9.1 và 9.3)
 
-- PC đặt IP tĩnh `192.168.5.1/24`, cắm dây vào cổng LAN của router.
+- PC đặt IP tĩnh `192.168.2.100/24`, cắm dây vào cổng LAN của router.
 - Chạy TFTP server (Windows: Tftpd64), thư mục gốc chứa các file image, cho phép qua
   Windows Firewall.
 - Đổi tên file cho ngắn, dễ gõ:
@@ -149,19 +149,19 @@ thêm lại mục `xiaomi,cr8806`.
 Gõ từng dòng:
 
 ```
-setenv ipaddr 192.168.5.2
+setenv ipaddr 192.168.2.1
 ```
 ```
-setenv serverip 192.168.5.1
+setenv serverip 192.168.2.100
 ```
 ```
 printenv ipaddr serverip
 ```
 → phải in ra đúng 2 IP ở trên.
 ```
-ping 192.168.5.1
+ping 192.168.2.100
 ```
-→ phải thấy `host 192.168.5.1 is alive`. Nếu không: đổi cổng LAN, kiểm tra IP/firewall PC.
+→ phải thấy `host 192.168.2.100 is alive`. Nếu không: đổi cổng LAN, kiểm tra IP/firewall PC.
 ```
 tftpboot 0x44000000 cr.itb
 ```
@@ -214,13 +214,13 @@ và bỏ dòng `nvram commit`.
 Làm các bước chuẩn bị ở 9.0, rồi gõ từng dòng (ghi vào slot 2 = `rootfs_1`):
 
 ```
-setenv ipaddr 192.168.5.2
+setenv ipaddr 192.168.2.1
 ```
 ```
-setenv serverip 192.168.5.1
+setenv serverip 192.168.2.100
 ```
 ```
-ping 192.168.5.1
+ping 192.168.2.100
 ```
 ```
 tftpboot 0x44000000 cr.ubi
@@ -262,7 +262,7 @@ Về slot 2: dùng `1` thay cho `0`. Trong U-Boot: `setenv ...` như trên, rồ
 ## 10. Kiểm tra sau khi khởi động
 
 Đăng nhập: cắm PC vào cổng bất kỳ (lan1-3 hoặc wan đều là LAN), PC đặt IP tĩnh
-`192.168.2.10/24` (router không có DHCP server), rồi:
+`192.168.2.100/24` (router không có DHCP server; cùng IP đã dùng cho TFTP ở 9.0), rồi:
 ```sh
 ssh root@192.168.2.1
 ```
@@ -312,7 +312,7 @@ không phải MAC ngẫu nhiên.
 
 Thử cắm dây lần lượt vào từng cổng lan1, lan2, lan3, wan, mỗi lần chạy:
 ```sh
-ping -c 3 192.168.2.10
+ping -c 3 192.168.2.100
 ```
 
 ### 10.3 WiFi
