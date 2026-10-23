@@ -1,0 +1,31 @@
+CONFIG_TARGET_qualcommax=y
+CONFIG_TARGET_qualcommax_ipq50xx=y
+CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_xiaomi_cr8806=y
+# --- Dumb AP: bo cac thanh phan router ---
+# CONFIG_PACKAGE_dnsmasq is not set
+# CONFIG_PACKAGE_firewall4 is not set
+# CONFIG_PACKAGE_nftables is not set
+# CONFIG_PACKAGE_kmod-nft-offload is not set
+# CONFIG_PACKAGE_odhcpd-ipv6only is not set
+# CONFIG_PACKAGE_ppp is not set
+# CONFIG_PACKAGE_ppp-mod-pppoe is not set
+# --- Khong can USB/ext4 tren AP ---
+# CONFIG_PACKAGE_kmod-usb3 is not set
+# CONFIG_PACKAGE_kmod-usb-dwc3 is not set
+# CONFIG_PACKAGE_kmod-usb-dwc3-qcom is not set
+# CONFIG_PACKAGE_e2fsprogs is not set
+# CONFIG_PACKAGE_kmod-fs-ext4 is not set
+# CONFIG_PACKAGE_losetup is not set
+# --- WiFi: chi dung ban smallbuffers cho may 256MB ---
+# CONFIG_PACKAGE_kmod-ath11k is not set
+CONFIG_PACKAGE_kmod-ath11k-smallbuffers=y
+CONFIG_PACKAGE_kmod-ath11k-ahb=y
+CONFIG_PACKAGE_wpad-basic-mbedtls=y
+# --- LuCI toi gian, tieng Anh (mac dinh) ---
+CONFIG_PACKAGE_uhttpd=y
+CONFIG_PACKAGE_uhttpd-mod-ubus=y
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_luci-mod-admin-full=y
+CONFIG_PACKAGE_luci-theme-bootstrap=y
+CONFIG_PACKAGE_rpcd-mod-rrdns=y
+CONFIG_LUCI_LANG_en=y
