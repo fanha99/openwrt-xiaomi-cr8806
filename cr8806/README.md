@@ -172,3 +172,15 @@ Quay lại slot cũ: đặt `flag_boot_rootfs` về slot kia (`fw_setenv` trong 
 ## 11. Nhật ký build
 
 Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
+
+### 2026-10-23 – build đầu tiên: THÀNH CÔNG (chưa test trên máy thật)
+- Nền: upstream `main` @ `84d081bf62`, kernel 6.18.55, gcc 14.4, WSL Ubuntu 26.04, 8 nhân, ~1 giờ.
+- Không có lỗi build. Cảnh báo kconfig (qt5base, squeezelite, openvswitch…) đến từ
+  feeds, không liên quan, bỏ qua được.
+- Image (111 gói): `factory.ubi` 13.9 MB (vừa slot rootfs 36 MB), `sysupgrade.bin` 13.0 MB,
+  `initramfs-uImage.itb` 12.5 MB.
+- Đã kiểm tra trong rootfs/DTB: board-2.bin đúng `variant=Xiaomi-CR8806`, module ath11k
+  build từ `mac80211-smallbuffers`, caldata `0:ART` @0x1000/@0x26800, script
+  `99-dumb-ap` (IP 192.168.2.1), không có firewall/dnsmasq/odhcpd/ppp.
+- Sửa trong quá trình làm: bỏ patch MAC WiFi (caldata gốc đã có MAC đúng; bản đầu gán
+  ngược 2.4G/5G).
