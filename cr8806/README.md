@@ -576,3 +576,22 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
   dnsmasq chạy, `dhcp.wan.ignore=1`, RAM available ~58 MB (chưa WiFi), ~45 MB (2 AP bật).
 - Lưu ý: máy đã cài bản cũ (`dumb_ap=1`) khi sysupgrade giữ config sẽ **không** tự đổi sang
   bố trí mới – sửa trong LuCI hoặc sysupgrade không giữ config.
+
+### 2026-10-23 – chuyển sang "router tối thiểu" (vẫn dùng làm AP được)
+- Theo yêu cầu: thêm `firewall4` (+nftables, NAT), `kmod-nft-offload` (bật
+  `flow_offloading`), `luci-app-firewall`, `ppp`/`ppp-mod-pppoe`/`luci-proto-ppp`,
+  `odhcpd-ipv6only`/`luci-proto-ipv6`, `irqbalance` (bật). Không UPnP, không DDNS.
+- `99-dumb-ap`: tạo lại `wan6` (DHCPv6 trên `@wan`), bật flow offload và irqbalance, marker
+  `dumb_ap=3`. Bỏ `/etc/sysctl.d/99-dumb-ap.conf` (router cần forwarding; firewall lo việc chặn).
+- Cài thêm kmod qua SSH lên máy đang chạy **không được**: bật module netfilter làm đổi cấu
+  hình kernel → hash `kernel=` khác → apk từ chối. Phải build cả image.
+- **Bẫy build**: sau khi đổi cấu hình kernel, `mac80211-smallbuffers` (ath11k) **không tự
+  build lại** → module cũ chạy trên kernel mới (đổi layout `sk_buff`/`net_device` do
+  `NET_INGRESS/EGRESS`…) → WiFi lỗi `unexpected rx length (nbytes 20, max 0)`,
+  `failed to connect to HTC: -110`. Sửa: `make package/kernel/mac80211/clean
+  package/kernel/gpio-button-hotplug/clean` rồi build lại. **Mỗi khi đổi gói kmod/netfilter
+  trong diffconfig phải làm bước này** (build.sh đã thêm).
+- Test (`sysupgrade -n`, 141 gói, sysupgrade.bin ~14 MB): `fw4 check` OK, bảng `inet fw4`,
+  zone lan/wan(+wan6), flow offload, irqbalance/odhcpd/dnsmasq chạy, 2 AP lên.
+- RAM available ~30 MB khi bật 2 AP (bản AP-only trước đó ~45 MB). Tiến trình lớn nhất:
+  hostapd ~3.5 MB, wpa_supplicant ~3.1 MB, netifd ~2.5 MB, rpcd ~2 MB.
