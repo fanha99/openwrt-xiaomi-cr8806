@@ -496,3 +496,16 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
 - **CẢNH BÁO: KHÔNG flash `factory.ubi`/`sysupgrade.bin` của các bản build trước commit
   này** – ghi bằng ECC 4-bit thì U-Boot (ECC 8-bit) không đọc được → máy không boot slot đó.
 - Bản vá BDF 0x45c (lần 3) vẫn giữ: firmware 2.7 yêu cầu giá trị 0 (MX2000 / RA81 M81).
+
+### 2026-10-23 – test initramfs lần 5 (ECC 8-bit): WiFi CHẠY
+- NAND đọc đúng: md5 của `0:sbl1`, `0:qsee`, `0:qsee_1`, `0:appsbl`, `0:appsbl_1` trên máy
+  test trùng với bản backup (ART/bdata khác vì là dữ liệu riêng từng máy). UBI attach
+  `mtd21` không lỗi.
+- WiFi: không còn crash; `phy0` 2.4G (ch1 HE20, 23 dBm), `phy1` 5G (ch36 HE80, 24 dBm),
+  cả 2 `AP-ENABLED`. MAC WiFi lấy từ caldata: 5G = LAN+1, 2.4G = LAN+2 (giống stock).
+- Ethernet: `eth0`/wan = ART+0x0, `eth1`/br-lan = ART+0x6 (đúng MAC U-Boot in ra).
+- RAM (initramfs, rootfs nằm trong RAM): available ~55 MB khi chưa bật WiFi, ~34 MB khi
+  bật cả 2 AP. Cài vào flash sẽ dư hơn (rootfs không chiếm RAM).
+- `fw_printenv` đọc được env (`flag_*`); `fw_printenv -c /etc/fw_sys.config` đọc được bdata.
+- LED: `blue:status`, `yellow:status`, `blue:wan`, `yellow:wan` có mặt.
+- Chưa test: client kết nối WiFi/throughput, nút bấm, cài vào flash + dual-boot, sysupgrade.
