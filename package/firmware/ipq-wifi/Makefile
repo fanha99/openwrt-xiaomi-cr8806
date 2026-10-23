@@ -118,6 +118,7 @@ ALLWIFIBOARDS:= \
 	xiaomi_aiot-ac2350 \
 	xiaomi_ax3600 \
 	xiaomi_ax6000 \
+	xiaomi_cr8806 \
 	xiaomi_ax9000 \
 	xiaomi_redmi-ax5400 \
 	xunison_exigo-hub-d50-5g \
@@ -332,6 +333,7 @@ $(eval $(call generate-ipq-wifi-package,wallys_dr5018s,Wallys DR5018S))
 $(eval $(call generate-ipq-wifi-package,xiaomi_aiot-ac2350,Xiaomi AIoT AC2350))
 $(eval $(call generate-ipq-wifi-package,xiaomi_ax3600,Xiaomi AX3600))
 $(eval $(call generate-ipq-wifi-package,xiaomi_ax6000,Xiaomi AX6000))
+$(eval $(call generate-ipq-wifi-package,xiaomi_cr8806,Xiaomi CR8806))
 $(eval $(call generate-ipq-wifi-package,xiaomi_ax9000,Xiaomi AX9000))
 $(eval $(call generate-ipq-wifi-package,xiaomi_redmi-ax5400,Xiaomi Redmi AX5400))
 $(eval $(call generate-ipq-wifi-package,xunison_exigo-hub-d50-5g,Xunison Exigo Hub D50 5G))

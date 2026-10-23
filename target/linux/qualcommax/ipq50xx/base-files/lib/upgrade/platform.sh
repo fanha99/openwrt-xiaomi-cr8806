@@ -338,6 +338,25 @@ platform_do_upgrade() {
 		CI_DATA_UBIPART="rootfs"
 		nand_do_upgrade "$1"
 		;;
+	xiaomi,cr8806)
+		# Keep the stock dual-boot layout: upgrade the slot we are
+		# running from and leave the other slot untouched.
+		if grep -q 'ubi.mtd=rootfs_1' /proc/cmdline; then
+			CI_UBIPART="rootfs_1"
+			fw_setenv flag_boot_rootfs 1
+			fw_setenv flag_last_success 1
+			fw_setenv flag_try_sys2_failed 0
+		else
+			CI_UBIPART="rootfs"
+			fw_setenv flag_boot_rootfs 0
+			fw_setenv flag_last_success 0
+			fw_setenv flag_try_sys1_failed 0
+		fi
+		fw_setenv flag_boot_success 1
+		fw_setenv boot_wait on
+		fw_setenv uart_en 1
+		nand_do_upgrade "$1"
+		;;
 	xunison,exigo-hub-d50-5g|\
 	yuncore,ax830|\
 	yuncore,ax850|\
