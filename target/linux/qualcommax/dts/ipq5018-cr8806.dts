@@ -128,6 +128,13 @@
 		compatible = "spi-nand";
 		reg = <0>;
 		nand-ecc-engine = <&qpic_nand>;
+		/*
+		 * The stock U-Boot uses 8-bit ECC. Without this the driver
+		 * picks 4-bit from the chip requirements and every codeword
+		 * read is misaligned (corrupted caldata, UBI read errors).
+		 */
+		nand-ecc-step-size = <512>;
+		nand-ecc-strength = <8>;
 		nand-bus-width = <8>;
 
 		partitions {

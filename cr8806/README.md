@@ -480,3 +480,19 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
   Payload md5 sau vá: `82e6530034c5b1ce97fbf1d560287bae`.
 - README: `ip` của busybox không có `-br`, không có lệnh `bridge` → sửa lệnh ở mục 10.2.
 - eth1 vẫn MAC ngẫu nhiên dù 02_network đã lấy MAC từ `0:art`+0x6 → đang điều tra.
+
+### 2026-10-23 – test initramfs lần 4: tìm ra nguyên nhân gốc – NAND đọc sai ECC
+- Vẫn crash `phyrf_bdf.c:605` sau khi vá BDF.
+- Dump toàn bộ mtd của máy test qua SSH (chỉ đọc) và so với bản backup (đọc bằng kernel
+  QSDK 5.4 của hzyitc): **mọi phân vùng đều khác**, kể cả `0:appsbl` và `0:appsbl_1`
+  (2 bản U-Boot giống hệt nhau trên backup nhưng đọc ra khác nhau trên máy test).
+- Mẫu lỗi: dữ liệu lệch thêm 4 byte sau mỗi codeword 512 byte → bố trí ECC sai.
+  U-Boot Xiaomi dùng **ECC 8-bit** (`Serial NAND ... ECC:8-bit`), DTS thiếu
+  `nand-ecc-strength` nên driver `spi-qpic-snand` tự chọn ECC 4-bit theo chip
+  GD5F1GQ5REYIG. Hệ quả: caldata WiFi đọc ra bị hỏng (→ firmware assert), UBI báo
+  `unable to read from mtd21`, MAC `eth1` không đọc được.
+- Sửa: thêm `nand-ecc-step-size = <512>; nand-ecc-strength = <8>;` vào DTS (giống
+  Xiaomi AX6000, Redmi AX5400 và RA81).
+- **CẢNH BÁO: KHÔNG flash `factory.ubi`/`sysupgrade.bin` của các bản build trước commit
+  này** – ghi bằng ECC 4-bit thì U-Boot (ECC 8-bit) không đọc được → máy không boot slot đó.
+- Bản vá BDF 0x45c (lần 3) vẫn giữ: firmware 2.7 yêu cầu giá trị 0 (MX2000 / RA81 M81).
