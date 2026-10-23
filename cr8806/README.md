@@ -136,6 +136,46 @@ Kết quả: `bin/targets/qualcommax/ipq50xx/`
 - `openwrt-qualcommax-ipq50xx-xiaomi_cr8806-squashfs-sysupgrade.bin` – nâng cấp
   từ OpenWrt bản này về sau
 
+### 7.1 Build trên GitHub Actions / tạo Release
+
+Workflow `.github/workflows/cr8806.yml` chạy `cr8806/build.sh` trên máy ảo của
+GitHub (ubuntu-24.04, 4 nhân). Lần đầu mất khoảng 2–3 giờ, giới hạn 6 giờ. Repo
+public nên không tính phí.
+
+Chỉ build để thử (không tạo Release):
+```bash
+gh workflow run cr8806.yml -R fanha99/cr8806-dump-ap
+gh run watch -R fanha99/cr8806-dump-ap
+```
+Sau khi chạy xong, file nằm ở mục **Artifacts** của lần chạy đó (trên web) hoặc
+tải bằng `gh run download <run-id> -R fanha99/cr8806-dump-ap`.
+
+Build rồi tạo Release (tên tag phải bắt đầu bằng `cr8806-`):
+```bash
+git tag cr8806-2026.10.23
+git push fork cr8806-2026.10.23
+```
+Release gồm `initramfs-uImage.itb`, `squashfs-factory.ubi`, `squashfs-sysupgrade.bin`,
+`manifest`, `sha256sums`.
+
+Upload bản build trên máy (không cần chờ GitHub build):
+```bash
+cd bin/targets/qualcommax/ipq50xx
+gh release create cr8806-2026.10.23 -R fanha99/cr8806-dump-ap \
+  --title "CR8806 2026.10.23" --notes "Xem cr8806/README.md" \
+  *cr8806* sha256sums
+```
+
+Repo này là bản copy của OpenWrt nên có sẵn các workflow upstream (Build Kernel,
+Build Toolchains, LLM Review...). Chúng tự chạy khi push, vừa lâu vừa vô ích.
+Tắt chúng trong **Actions**: chọn từng workflow > `...` > **Disable workflow**,
+chỉ giữ `CR8806 build`. Có thể tắt tất cả bằng lệnh:
+```bash
+R=fanha99/cr8806-dump-ap
+gh workflow list -R $R --json name,id --jq '.[] | select(.name != "CR8806 build") | .id' |
+  xargs -n1 gh workflow disable -R $R
+```
+
 ## 8. Cập nhật bản vá upstream
 
 ```bash
