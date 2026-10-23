@@ -51,6 +51,8 @@ mtd20 overlay, mtd21 data
 
 ## 4. Nguồn
 
+- Repo của dự án này: `https://github.com/fanha99/cr8806-dump-ap` (nhánh `main` =
+  nhánh local `cr8806`, remote `fork`). Sau khi rebase: `git push --force-with-lease fork cr8806:main`.
 - Upstream: `https://github.com/openwrt/openwrt.git` nhánh `main` (remote `origin`).
 - PR smallbuffers: `https://github.com/hzyitc/openwrt-redmi-ax3000.git`, nhánh
   `ath11k-smallbuffers` (remote `hzyitc`).
