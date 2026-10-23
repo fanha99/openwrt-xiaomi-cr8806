@@ -289,17 +289,18 @@ dmesg | grep -iE 'ubi|nand|error|fail'
 ### 10.2 Mạng (4 cổng, IP, MAC)
 
 ```sh
-ip -br link
+ip link
 ```
-→ có `eth0`, `eth1`, `lan1`, `lan2`, `lan3`, `wan`, `br-lan`; cổng có cắm dây là `UP`.
+→ có `eth0`, `eth1`, `lan1@eth1`, `lan2@eth1`, `lan3@eth1`, `wan@eth0`, `br-lan`; cổng có
+cắm dây có `LOWER_UP`. (Máy dùng `ip` của busybox: không có tuỳ chọn `-br`.)
 ```sh
-ip -br addr show br-lan
+ip addr show br-lan
 ```
-→ `192.168.2.1/24`.
+→ có dòng `inet 192.168.2.1/24`.
 ```sh
-bridge link
+ls /sys/class/net/br-lan/brif
 ```
-→ `lan1`, `lan2`, `lan3`, `wan` đều `master br-lan`.
+→ `lan1  lan2  lan3  wan`.
 ```sh
 dmesg | grep -iE 'qca8k|link is up'
 ```
@@ -321,6 +322,10 @@ ping -c 3 192.168.2.100
 dmesg | grep -i ath11k
 ```
 → **không** còn dòng `failed to load CAL data` / `failed to load board data`.
+```sh
+dmesg | grep -A4 'fatal error'
+```
+→ không có gì (nếu có: firmware WiFi crash, gửi toàn bộ kết quả lệnh này).
 ```sh
 ls -l /lib/firmware/ath11k/
 ```
@@ -461,3 +466,17 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
 - Lưu ý: RA81 (M81) dùng BDF board-id 36 (0x24); CR8806 M79 dùng board-id 16 (0x10) –
   caldata ART của máy backup khớp 99.9% với BDF id 16. Nếu máy test vẫn crash, thử
   BDF id 36 (board ID nằm ở byte `0:art`+0x103a: máy backup = 0x10 → M79; xem bằng `hexdump -C -s 0x1030 -n 16 /dev/mtd13`).
+
+### 2026-10-23 – test initramfs lần 3: vẫn crash `phyrf_bdf.c:605` → vá BDF 2.4G
+- Mode 2 đã có hiệu lực nhưng Q6 vẫn assert `phyrf_bdf.c:605 Assertion 0 failed` ở `wlan0`.
+- Máy test: board ID `0:art`+0x103a = 0x10 → M79 (đúng BDF id 16).
+- So sánh BDF id 16 (M79) với id 36 (M81, chạy được trên RA81): byte **0x45c** = `03` ở
+  id 16, `00` ở id 36 và QCN6122 id 96. Trên forum OpenWrt (Linksys MX2000, cùng firmware
+  WLAN.HK.2.7.0.1-01744) đúng lỗi `phyrf_bdf.c:605` được sửa bằng cách đổi 0x45c từ 3 → 0
+  ("This value is 3 in 2.4" – hzyitc).
+- Sửa: vá `board-xiaomi_cr8806.ipq5018` bằng
+  [ath11k_bdf_tool.py](https://github.com/testuser7/ath_bdf_tool) `-p bdf 0x45c 00`
+  (checksum @0xa cập nhật 0x2a75 → 0x2a76), đóng gói lại vào board-2.bin cùng tên.
+  Payload md5 sau vá: `82e6530034c5b1ce97fbf1d560287bae`.
+- README: `ip` của busybox không có `-br`, không có lệnh `bridge` → sửa lệnh ở mục 10.2.
+- eth1 vẫn MAC ngẫu nhiên dù 02_network đã lấy MAC từ `0:art`+0x6 → đang điều tra.
