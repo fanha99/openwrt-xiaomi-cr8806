@@ -38,8 +38,12 @@ mtd20 overlay, mtd21 data
 - MAC WiFi đã có sẵn trong caldata (2.4G = MAC@0x6 + 2, 5G = MAC@0x6 + 1), nên
   không cần patch MAC.
 - Caldata 2.4G trong ART khớp 99.9% với BDF board-id 0x10 (M79) → dùng BDF M79.
-- U-Boot chọn slot theo `flag_boot_rootfs` (0 = rootfs, 1 = rootfs_1) và truyền
-  `ubi.mtd=rootfs` hoặc `ubi.mtd=rootfs_1` trong bootargs.
+- U-Boot (`bootmiwifi`) chọn slot theo `flag_last_success` (0 = rootfs, 1 = rootfs_1)
+  và `flag_ota_reboot` (=1 → boot slot **còn lại**), rồi truyền `ubi.mtd=rootfs` hoặc
+  `ubi.mtd=rootfs_1` trong bootargs. `flag_boot_rootfs` **không** được dùng. Slot lỗi khi
+  boot → U-Boot đặt `flag_try_sysN_failed=1` và chuyển sang slot kia. (Theo phân tích
+  disassembly của [RA81OpenWRT](https://github.com/lutvzn/RA81OpenWRT), đã kiểm chứng trên
+  máy test: `flag_ota_reboot=0`, `flag_last_success=0` → boot `rootfs`.)
 
 ## 3. Tình trạng upstream (10/2026)
 
@@ -84,8 +88,8 @@ mtd20 overlay, mtd21 data
 
 ### sysupgrade và dual-boot
 `platform.sh` ghi firmware mới vào **đúng slot đang chạy** (đọc `ubi.mtd=` trong
-`/proc/cmdline`), đặt lại các cờ `flag_boot_rootfs`, `flag_last_success`,
-`flag_try_sysN_failed=0`, `flag_boot_success=1` và **không đụng slot còn lại**.
+`/proc/cmdline`), đặt `flag_last_success=<slot đang chạy>`, `flag_ota_reboot=0`,
+`flag_try_sys1_failed=0`, `flag_try_sys2_failed=0` và **không đụng slot còn lại**.
 
 ## 6. Thư mục `cr8806/`
 
@@ -190,8 +194,8 @@ cat /proc/cmdline
 ```sh
 ubiformat /dev/mtd18 -y -f /tmp/cr.ubi
 nvram set flag_try_sys1_failed=0
-nvram set flag_boot_rootfs=0
 nvram set flag_last_success=0
+nvram set flag_ota_reboot=0
 nvram commit
 reboot
 ```
@@ -200,14 +204,28 @@ reboot
 ```sh
 ubiformat /dev/mtd19 -y -f /tmp/cr.ubi
 nvram set flag_try_sys2_failed=0
-nvram set flag_boot_rootfs=1
 nvram set flag_last_success=1
+nvram set flag_ota_reboot=0
 nvram commit
 reboot
 ```
 
 Trên ROM OpenWrt cũ không có `nvram`: thay `nvram set X=Y` bằng `fw_setenv X Y`
 và bỏ dòng `nvram commit`.
+
+**Từ initramfs của bản này** (mục 9.1, đã làm trên máy test): PC/WSL truyền thẳng
+image qua SSH, không cần chép vào RAM router (gõ trên PC/WSL, 1 dòng):
+```sh
+ssh root@192.168.2.1 "ubiformat /dev/mtd19 -y -f - -S $(stat -c %s cr.ubi)" < cr.ubi
+```
+Rồi trên router:
+```sh
+fw_setenv flag_try_sys2_failed 0
+fw_setenv flag_last_success 1
+fw_setenv flag_ota_reboot 0
+reboot
+```
+(Ghi `rootfs` thì dùng `/dev/mtd18` và `flag_try_sys1_failed 0`, `flag_last_success 0`.)
 
 ### 9.3 Cài vào flash qua U-Boot (TFTP)
 
@@ -233,10 +251,10 @@ flash rootfs_1
 setenv flag_try_sys2_failed 0
 ```
 ```
-setenv flag_boot_rootfs 1
-```
-```
 setenv flag_last_success 1
+```
+```
+setenv flag_ota_reboot 0
 ```
 ```
 saveenv
@@ -246,18 +264,18 @@ reset
 ```
 
 Ghi vào slot 1 (`rootfs`) thì thay bằng `flash rootfs`, `flag_try_sys1_failed 0`,
-`flag_boot_rootfs 0`, `flag_last_success 0`.
+`flag_last_success 0`.
 
-### 9.4 Quay lại firmware ở slot kia
+### 9.4 Chuyển sang slot kia
 
-Trong OpenWrt mới (SSH `root@192.168.2.1`), về slot 1:
+Trong OpenWrt (SSH `root@192.168.2.1`), về slot 1 (`rootfs`):
 ```sh
-fw_setenv flag_boot_rootfs 0
 fw_setenv flag_last_success 0
+fw_setenv flag_ota_reboot 0
 reboot
 ```
-Về slot 2: dùng `1` thay cho `0`. Trong U-Boot: `setenv ...` như trên, rồi `saveenv`,
-`reset`.
+Về slot 2 (`rootfs_1`): dùng `flag_last_success 1`. Trong U-Boot: `setenv` 2 biến đó,
+rồi `saveenv`, `reset`.
 
 ## 10. Kiểm tra sau khi khởi động
 
@@ -509,3 +527,18 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
 - `fw_printenv` đọc được env (`flag_*`); `fw_printenv -c /etc/fw_sys.config` đọc được bdata.
 - LED: `blue:status`, `yellow:status`, `blue:wan`, `yellow:wan` có mặt.
 - Chưa test: client kết nối WiFi/throughput, nút bấm, cài vào flash + dual-boot, sysupgrade.
+
+### 2026-10-23 – cài vào flash cả 2 slot: BOOT OK
+- Hai slot cũ trên máy test (một bản OpenWrt 6.12 "Redmi AX3000 / Xiaomi CR880X
+  (dual-slot)") đều hỏng → người dùng đồng ý ghi đè cả hai.
+- Từ initramfs: `ubiformat /dev/mtd19` rồi `/dev/mtd18` với `factory.ubi` (truyền qua SSH
+  stdin, `-f - -S <size>`); đọc lại 2 slot: volume `kernel`/`rootfs` trùng md5 với image,
+  có `rootfs_data` (autoresize).
+- Phát hiện: `bootmiwifi` chọn slot theo `flag_last_success` + `flag_ota_reboot`, không
+  theo `flag_boot_rootfs` (env lúc đó `flag_ota_reboot=1, flag_last_success=1` → sẽ boot
+  `rootfs`). Đặt `flag_ota_reboot=0, flag_last_success=0`, reboot.
+- Kết quả: boot từ flash ~40 s, cmdline `ubi.mtd=rootfs ... root=/dev/ubiblock0_1`,
+  overlay ubifs 13.8 MB, IP 192.168.2.1, RAM available ~61 MB (chưa bật WiFi).
+- Sửa `platform.sh` (sysupgrade): đặt `flag_last_success=<slot>` và `flag_ota_reboot=0`
+  (trước đây đặt `flag_boot_rootfs` – vô tác dụng; nếu env còn `flag_ota_reboot=1` thì
+  sau sysupgrade U-Boot sẽ boot nhầm slot kia). README mục 9.2–9.4 viết lại theo logic này.
