@@ -89,6 +89,15 @@ ipq50xx_setup_macs()
 		# DSA conduit's address on every boot - pin it to the label MAC
 		ucidef_set_network_device_mac "eth0" "$label_mac"
 		;;
+	xiaomi,cr8806)
+		# WAN MAC at 0:art+0x0, LAN MAC at 0:art+0x6; pin the LAN one
+		# to the DSA conduit too, so stmmac does not randomise it
+		lan_mac=$(mtd_get_mac_binary "0:art" 0x6)
+		[ -n "$lan_mac" ] || return
+		ucidef_set_interface_macaddr "lan" "$lan_mac"
+		ucidef_set_network_device_mac "eth1" "$lan_mac"
+		ucidef_set_label_macaddr "$lan_mac"
+		;;
 	tplink,eap650-outdoor-v1|\
 	tplink,re700x)
 		label_mac=$(get_mac_binary /tmp/factory_data/default-mac 0)

@@ -444,3 +444,20 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
   `0:art` và uboot-envtools `0:appsblenv`.
 - README: viết lại mục 9 (TFTP gõ từng dòng, đổi tên file `cr.itb`/`cr.ubi`) và mục 10
   (lệnh kiểm tra cụ thể + kết quả mong đợi).
+
+### 2026-10-23 – test initramfs lần 2: firmware WiFi crash → đổi sang memory mode 2
+- Tên phân vùng đã đúng (`0:art`), caldata được trích, BDF được firmware nhận.
+- Q6 firmware crash ngay khi xử lý BDF/caldata của radio 2.4G:
+  `fatal error received: ... phyrf_bdf.c:605 Assertion 0 failed` (process `wlan0`),
+  sau đó 5G báo `-104` (mất QMI) và 2.4G `-110` (timeout).
+- `eth1` (LAN) nhận MAC ngẫu nhiên `62:db:...` dù DTS trỏ nvmem `0:art`+0x6.
+- Đối chiếu với [RA81OpenWRT](https://github.com/lutvzn/RA81OpenWRT) (Redmi AX3000, cùng
+  mạch, WiFi đã chạy trên OpenWrt 25.12 với cùng firmware WLAN.HK.2.7.0.1 và BDF
+  hzyitc): họ dùng **FW memory mode 2** (giống firmware gốc Xiaomi `tgt-mem-mode = 2`
+  cho máy 256 MB) và mở rộng `tz_region` lên 4 MiB như DT gốc. Bản này đang dùng mode 1.
+- Sửa:
+  - DTS: `qcom,ath11k-fw-memory-mode = <2>` cho cả 2 radio, `&tz_region` 0x400000.
+  - 02_network: lấy MAC LAN từ `0:art`+0x6, gán cho `eth1` và `lan` (không phụ thuộc nvmem).
+- Lưu ý: RA81 (M81) dùng BDF board-id 36 (0x24); CR8806 M79 dùng board-id 16 (0x10) –
+  caldata ART của máy backup khớp 99.9% với BDF id 16. Nếu máy test vẫn crash, thử
+  BDF id 36 (board ID nằm ở byte `0:art`+0x103a: máy backup = 0x10 → M79; xem bằng `hexdump -C -s 0x1030 -n 16 /dev/mtd13`).

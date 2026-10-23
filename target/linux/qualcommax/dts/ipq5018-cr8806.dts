@@ -83,6 +83,14 @@
 	};
 };
 
+/*
+ * The vendor DT reserves 4 MiB for TZ (upstream: 2 MiB); keep Linux out
+ * of the whole region.
+ */
+&tz_region {
+	reg = <0x0 0x4ac00000 0x0 0x400000>;
+};
+
 &sleep_clk {
 	clock-frequency = <32000>;
 };
@@ -347,11 +355,16 @@
 		     /*   reserved:	*/ 0 0>;
 };
 
+/*
+ * 256 MiB of RAM: use the low-memory firmware profile (mode 2), as the
+ * vendor firmware does (qcom,tgt-mem-mode = <2>). With mode 1 the Q6
+ * firmware asserts in phyrf_bdf.c while loading the board data.
+ */
 &wifi {
 	// IPQ5000 2.4G
 	qcom,rproc = <&q6_wcss_pd1>;
 	qcom,ath11k-calibration-variant = "Xiaomi-CR8806";
-	qcom,ath11k-fw-memory-mode = <1>;
+	qcom,ath11k-fw-memory-mode = <2>;
 	qcom,bdf-addr = <0x4c400000>;
 
 	ieee80211-freq-limit = <2400000 2483000>;
@@ -364,7 +377,7 @@
 	qcom,rproc = <&q6_wcss_pd2>;
 	qcom,userpd-subsys-name = "q6v5_wcss_userpd2";
 	qcom,ath11k-calibration-variant = "Xiaomi-CR8806";
-	qcom,ath11k-fw-memory-mode = <1>;
+	qcom,ath11k-fw-memory-mode = <2>;
 	qcom,bdf-addr = <0x4d100000>;
 	qcom,m3-dump-addr = <0x4df00000>;
 
