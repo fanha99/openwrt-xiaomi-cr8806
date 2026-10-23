@@ -32,7 +32,9 @@ mtd19 rootfs_1    0x2400000 (slot 2)
 mtd20 overlay, mtd21 data
 ```
 
-- Tên phân vùng **viết hoa** (`0:ART`, `0:APPSBLENV`).
+- Tên phân vùng **viết hoa** (`0:ART`, `0:APPSBLENV`) trên ROM cũ (kernel 5.4). Kernel
+  mainline (parser `qcom,smem-part`) **đổi sang chữ thường**: `0:art`, `0:appsblenv` —
+  DTS, caldata và uboot-envtools phải dùng chữ thường.
 - MAC WiFi đã có sẵn trong caldata (2.4G = MAC@0x6 + 2, 5G = MAC@0x6 + 1), nên
   không cần patch MAC.
 - Caldata 2.4G trong ART khớp 99.9% với BDF board-id 0x10 (M79) → dùng BDF M79.
@@ -76,8 +78,8 @@ mtd20 overlay, mtd21 data
      QCN6102 (id 96) với tên `bus=ahb,qmi-chip-id=0,qmi-board-id=255,variant=Xiaomi-CR8806`
      (firmware mainline báo board-id 255).
    - `base-files`: 02_network (lan1-3 + wan, conduit eth1/eth0), 01_leds,
-     caldata hotplug (`0:ART` @0x1000 / @0x26800), sysupgrade.
-   - `uboot-envtools`: `0:APPSBLENV` và `bdata` (offset 0, size 0x10000, sector 0x20000).
+     caldata hotplug (`0:art` @0x1000 / @0x26800), sysupgrade.
+   - `uboot-envtools`: `0:appsblenv` và `bdata` (offset 0, size 0x10000, sector 0x20000).
 5. `cr8806: …` – thư mục `cr8806/` (cấu hình build, script, tài liệu này).
 
 ### sysupgrade và dual-boot
@@ -124,50 +126,293 @@ Khi PR #21495 được merge, git sẽ tự bỏ 3 commit trùng khi rebase. N�
 (thường ở `11-ath11k-caldata`, `02_network`, `ipq50xx.mk`): giữ phần upstream và
 thêm lại mục `xiaomi,cr8806`.
 
-## 9. Cài đặt (giữ dual-boot)
+## 9. Cài đặt
 
-**Trước khi làm: backup toàn bộ mtd** (như bản backup đã có) và nên có UART.
+**Trước khi làm: backup toàn bộ mtd** (như bản backup đã có) và nên có UART
+(115200 8N1).
+
+### 9.0 Chuẩn bị TFTP (cho 9.1 và 9.3)
+
+- PC đặt IP tĩnh `192.168.5.1/24`, cắm dây vào cổng LAN của router.
+- Chạy TFTP server (Windows: Tftpd64), thư mục gốc chứa các file image, cho phép qua
+  Windows Firewall.
+- Đổi tên file cho ngắn, dễ gõ:
+  - `...-initramfs-uImage.itb` → `cr.itb`
+  - `...-squashfs-factory.ubi` → `cr.ubi`
+- Trong U-Boot: **gõ tay từng dòng**, Enter sau mỗi dòng. Không dán nhiều lệnh một
+  lúc, không nối bằng `;` (UART bị rớt ký tự → lỗi `flags type check failure`).
+  Tắt bộ gõ tiếng Việt (Unikey/EVKey).
+- Vào U-Boot: bật nguồn, bấm phím bất kỳ khi thấy `Hit any key to stop autoboot`.
+
+### 9.1 Boot thử initramfs (chỉ chạy trong RAM, KHÔNG ghi flash)
+
+Gõ từng dòng:
+
+```
+setenv ipaddr 192.168.5.2
+```
+```
+setenv serverip 192.168.5.1
+```
+```
+printenv ipaddr serverip
+```
+→ phải in ra đúng 2 IP ở trên.
+```
+ping 192.168.5.1
+```
+→ phải thấy `host 192.168.5.1 is alive`. Nếu không: đổi cổng LAN, kiểm tra IP/firewall PC.
+```
+tftpboot 0x44000000 cr.itb
+```
+→ chờ chạy hết dấu `#`, cuối cùng có `Bytes transferred = 125xxxxx`.
+```
+bootm 0x44000000#config@mp02.1
+```
+
+Không dùng `saveenv` ở bước này → rút điện là máy về firmware cũ. Sau khi boot xong
+(~1 phút), làm các bước kiểm tra ở mục 10 (bỏ qua 10.6 sysupgrade).
+
+### 9.2 Cài vào flash từ firmware đang chạy (giữ dual-boot)
 
 Từ firmware đang chạy (stock Xiaomi có SSH, hoặc ROM OpenWrt/QSDK cũ) – ghi vào
-**slot đang không chạy**:
+**slot đang không chạy**. Chép `cr.ubi` vào `/tmp` rồi gõ từng dòng:
 
 ```sh
-cd /tmp   # chép file factory.ubi vào đây
-cat /proc/mtd            # xác nhận rootfs=mtd18, rootfs_1=mtd19
-cat /proc/cmdline        # xem đang chạy ubi.mtd=rootfs hay rootfs_1
+cd /tmp
+cat /proc/mtd
+cat /proc/cmdline
+```
+→ `/proc/mtd`: xác nhận `rootfs` = mtd18, `rootfs_1` = mtd19.
+→ `/proc/cmdline`: xem đang chạy `ubi.mtd=rootfs` hay `ubi.mtd=rootfs_1`.
 
-# Nếu đang chạy rootfs_1 -> ghi vào rootfs (slot 1):
-ubiformat /dev/mtd18 -y -f openwrt-qualcommax-ipq50xx-xiaomi_cr8806-squashfs-factory.ubi
-nvram set flag_try_sys1_failed=0; nvram set flag_boot_rootfs=0; nvram set flag_last_success=0; nvram commit
-# (trên OpenWrt cũ dùng fw_setenv thay cho nvram set)
-
-# Nếu đang chạy rootfs -> ghi vào rootfs_1 (slot 2):
-ubiformat /dev/mtd19 -y -f openwrt-qualcommax-ipq50xx-xiaomi_cr8806-squashfs-factory.ubi
-nvram set flag_try_sys2_failed=0; nvram set flag_boot_rootfs=1; nvram set flag_last_success=1; nvram commit
-
+**Nếu đang chạy `rootfs_1`** → ghi vào `rootfs` (slot 1):
+```sh
+ubiformat /dev/mtd18 -y -f /tmp/cr.ubi
+nvram set flag_try_sys1_failed=0
+nvram set flag_boot_rootfs=0
+nvram set flag_last_success=0
+nvram commit
 reboot
 ```
 
-Qua U-Boot (UART, 115200):
+**Nếu đang chạy `rootfs`** → ghi vào `rootfs_1` (slot 2):
+```sh
+ubiformat /dev/mtd19 -y -f /tmp/cr.ubi
+nvram set flag_try_sys2_failed=0
+nvram set flag_boot_rootfs=1
+nvram set flag_last_success=1
+nvram commit
+reboot
 ```
-setenv ipaddr 192.168.1.2; setenv serverip 192.168.1.1
-tftpboot openwrt-qualcommax-ipq50xx-xiaomi_cr8806-squashfs-factory.ubi
+
+Trên ROM OpenWrt cũ không có `nvram`: thay `nvram set X=Y` bằng `fw_setenv X Y`
+và bỏ dòng `nvram commit`.
+
+### 9.3 Cài vào flash qua U-Boot (TFTP)
+
+Làm các bước chuẩn bị ở 9.0, rồi gõ từng dòng (ghi vào slot 2 = `rootfs_1`):
+
+```
+setenv ipaddr 192.168.5.2
+```
+```
+setenv serverip 192.168.5.1
+```
+```
+ping 192.168.5.1
+```
+```
+tftpboot 0x44000000 cr.ubi
+```
+→ cuối cùng có `Bytes transferred = 138xxxxx`.
+```
 flash rootfs_1
-setenv flag_try_sys2_failed 0; setenv flag_boot_rootfs 1; setenv flag_last_success 1
-saveenv; reset
+```
+```
+setenv flag_try_sys2_failed 0
+```
+```
+setenv flag_boot_rootfs 1
+```
+```
+setenv flag_last_success 1
+```
+```
+saveenv
+```
+```
+reset
 ```
 
-Quay lại slot cũ: đặt `flag_boot_rootfs` về slot kia (`fw_setenv` trong OpenWrt).
+Ghi vào slot 1 (`rootfs`) thì thay bằng `flash rootfs`, `flag_try_sys1_failed 0`,
+`flag_boot_rootfs 0`, `flag_last_success 0`.
 
-## 10. Việc cần kiểm tra trên máy thật
+### 9.4 Quay lại firmware ở slot kia
 
-- [ ] Boot được, `logread`/`dmesg` không lỗi NAND/UBI.
-- [ ] 4 cổng mạng (lan1-3, wan) đều link và nằm trong br-lan.
-- [ ] `dmesg | grep ath11k`: 2 radio lên, load đúng `variant=Xiaomi-CR8806`.
-- [ ] `free`: còn RAM sau khi bật cả 2 WiFi.
-- [ ] `fw_printenv` đọc được env (`0:APPSBLENV`).
-- [ ] sysupgrade giữ đúng slot; slot còn lại vẫn boot được.
-- [ ] LED, nút reset (giữ để reset) hoạt động.
+Trong OpenWrt mới (SSH `root@192.168.2.1`), về slot 1:
+```sh
+fw_setenv flag_boot_rootfs 0
+fw_setenv flag_last_success 0
+reboot
+```
+Về slot 2: dùng `1` thay cho `0`. Trong U-Boot: `setenv ...` như trên, rồi `saveenv`,
+`reset`.
+
+## 10. Kiểm tra sau khi khởi động
+
+Đăng nhập: cắm PC vào cổng bất kỳ (lan1-3 hoặc wan đều là LAN), PC đặt IP tĩnh
+`192.168.2.10/24` (router không có DHCP server), rồi:
+```sh
+ssh root@192.168.2.1
+```
+Hoặc dùng luôn shell trên UART (Enter để ra dấu nhắc `root@CR8806-AP:~#`).
+LuCI: http://192.168.2.1 (user `root`, chưa có mật khẩu).
+
+Gõ từng lệnh dưới đây và gửi lại kết quả nếu khác với "mong đợi".
+
+### 10.1 Hệ thống, flash
+
+```sh
+cat /proc/cmdline
+```
+→ có `ubi.mtd=rootfs` hoặc `ubi.mtd=rootfs_1` (initramfs thì có thể không có).
+```sh
+cat /proc/mtd
+```
+→ tên phân vùng chữ thường: `0:art`, `0:appsblenv`, `rootfs`, `rootfs_1`, `bdata`…
+```sh
+dmesg | grep -iE 'ubi|nand|error|fail'
+```
+→ không có lỗi UBI/NAND (initramfs: không có dòng UBI là bình thường).
+
+### 10.2 Mạng (4 cổng, IP, MAC)
+
+```sh
+ip -br link
+```
+→ có `eth0`, `eth1`, `lan1`, `lan2`, `lan3`, `wan`, `br-lan`; cổng có cắm dây là `UP`.
+```sh
+ip -br addr show br-lan
+```
+→ `192.168.2.1/24`.
+```sh
+bridge link
+```
+→ `lan1`, `lan2`, `lan3`, `wan` đều `master br-lan`.
+```sh
+dmesg | grep -iE 'qca8k|link is up'
+```
+→ switch QCA8337 nhận, cổng cắm dây báo `Link is Up - 1Gbps/Full`.
+```sh
+cat /sys/class/net/eth0/address /sys/class/net/eth1/address
+```
+→ MAC lấy từ ART (giống MAC0/MAC1 U-Boot in ra lúc boot, dạng `d4:35:38:...`),
+không phải MAC ngẫu nhiên.
+
+Thử cắm dây lần lượt vào từng cổng lan1, lan2, lan3, wan, mỗi lần chạy:
+```sh
+ping -c 3 192.168.2.10
+```
+
+### 10.3 WiFi
+
+```sh
+dmesg | grep -i ath11k
+```
+→ **không** còn dòng `failed to load CAL data` / `failed to load board data`.
+```sh
+ls -l /lib/firmware/ath11k/
+```
+→ có `cal-ahb-c000000.wifi.bin` và `cal-ahb-b00a040.wifi.bin` (mỗi file 131072 byte).
+```sh
+iw phy
+```
+→ có 2 phy: 1 cái băng 2.4 GHz, 1 cái băng 5 GHz.
+```sh
+iw dev
+```
+
+Bật WiFi để thử (mặc định OpenWrt tắt WiFi), gõ từng dòng:
+```sh
+uci set wireless.radio0.disabled=0
+uci set wireless.radio1.disabled=0
+uci commit wireless
+wifi
+```
+Đợi ~30 giây rồi:
+```sh
+iw dev
+```
+→ có 2 interface `phy0-ap0` và `phy1-ap0` với `ssid OpenWrt`.
+```sh
+logread | grep -iE 'hostapd|ath11k'
+```
+→ có `AP-ENABLED` cho cả 2. Dùng điện thoại kết nối SSID `OpenWrt` (không mật khẩu,
+chỉ để test), đặt IP tĩnh 192.168.2.x rồi mở http://192.168.2.1.
+
+### 10.4 RAM
+
+```sh
+free
+```
+→ chạy **sau khi** bật cả 2 WiFi; cột `available` nên còn > 40000 (KB).
+```sh
+dmesg | grep -iE 'oom|out of memory'
+```
+→ không có gì.
+
+### 10.5 U-Boot env
+
+```sh
+fw_printenv | grep flag_
+```
+→ in ra các biến `flag_boot_rootfs`, `flag_last_success`… (không báo lỗi CRC/không mở
+được thiết bị).
+```sh
+fw_printenv -c /etc/fw_sys.config
+```
+→ đọc được env trong `bdata` (chỉ đọc, đừng sửa).
+
+### 10.6 sysupgrade (chỉ khi đã cài vào flash, không áp dụng cho initramfs)
+
+```sh
+cat /proc/cmdline
+```
+→ ghi nhớ đang chạy slot nào. Sau đó trong LuCI: System → Backup / Flash Firmware →
+flash `...-squashfs-sysupgrade.bin` (giữ cấu hình). Sau khi boot lại:
+```sh
+cat /proc/cmdline
+fw_printenv | grep flag_
+```
+→ vẫn đúng slot cũ, cấu hình (IP, WiFi) còn nguyên. Rồi thử 9.4 để chắc slot kia vẫn
+boot được firmware cũ.
+
+### 10.7 LED, nút bấm
+
+```sh
+ls /sys/class/leds
+```
+→ `blue:status`, `yellow:status`, `blue:wan`, `yellow:wan`.
+```sh
+echo 1 > /sys/class/leds/yellow:wan/brightness
+```
+→ đèn internet màu vàng sáng.
+```sh
+echo 0 > /sys/class/leds/yellow:wan/brightness
+```
+Nút bấm:
+```sh
+cat /sys/kernel/debug/gpio | grep -iE 'reset|mesh'
+```
+→ chạy 2 lần: một lần thả, một lần **đang giữ** nút; trạng thái `hi`/`lo` phải đổi.
+(Không giữ reset quá 5 giây khi đã cài flash → sẽ reset cấu hình.)
+
+### 10.8 Backup / restore cấu hình
+
+LuCI → System → Backup / Flash Firmware → **Generate archive** (tải về file
+`.tar.gz`). Đổi thử 1 thứ (VD hostname), rồi **Upload archive** file vừa tải →
+sau khi khởi động lại, hostname về như cũ.
 
 ## 11. Nhật ký build
 
@@ -184,3 +429,18 @@ Xem mục dưới (cập nhật mỗi lần build có lỗi/sửa).
   `99-dumb-ap` (IP 192.168.2.1), không có firewall/dnsmasq/odhcpd/ppp.
 - Sửa trong quá trình làm: bỏ patch MAC WiFi (caldata gốc đã có MAC đúng; bản đầu gán
   ngược 2.4G/5G).
+
+### 2026-10-23 – test initramfs lần 1 trên máy thật: WiFi lỗi → đã sửa
+- Boot initramfs qua TFTP OK, vào được shell, `free`: total 183 MB, available ~96 MB.
+- U-Boot: dán cả dòng `setenv ...; setenv ...` qua UART bị hỏng ký tự (`flags type
+  check failure`) → gõ tay từng lệnh, tắt bộ gõ tiếng Việt.
+- Lỗi: `qmi failed to load CAL data file:cal-ahb-c000000.wifi.bin` / `failed to load
+  board data file: -12` cho cả 2 radio. Firmware q6 và QMI đã lên (board_id 0xff đúng).
+- Nguyên nhân: parser `qcom,smem-part` của kernel 6.18 đổi tên phân vùng sang chữ thường
+  (`0:art`), còn cấu hình dùng `0:ART` (lấy từ ROM cũ) → script không tìm thấy phân vùng
+  để trích caldata; nvmem MAC trong DTS cũng không gắn được.
+- Sửa: `0:art` trong DTS + 11-ath11k-caldata, `0:appsblenv` trong uboot-envtools.
+- Build lại (incremental, ~15 phút): OK. Đã kiểm tra DTB có `0:art`, rootfs có caldata
+  `0:art` và uboot-envtools `0:appsblenv`.
+- README: viết lại mục 9 (TFTP gõ từng dòng, đổi tên file `cr.itb`/`cr.ubi`) và mục 10
+  (lệnh kiểm tra cụ thể + kết quả mong đợi).

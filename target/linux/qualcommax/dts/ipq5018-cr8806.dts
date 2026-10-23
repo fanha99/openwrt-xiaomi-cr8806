@@ -126,7 +126,7 @@
 			compatible = "qcom,smem-part";
 
 			partition-art {
-				label = "0:ART";
+				label = "0:art";
 				read-only;
 
 				nvmem-layout {
