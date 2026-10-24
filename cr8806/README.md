@@ -107,7 +107,7 @@ mtd20 overlay, mtd21 data
 
 ## 4. Nguồn
 
-- Repo của dự án này: `https://github.com/fanha99/cr8806-dump-ap` (nhánh `main` =
+- Repo của dự án này: `https://github.com/fanha99/openwrt-xiaomi-cr8806` (nhánh `main` =
   nhánh local `cr8806`, remote `fork`). Sau khi rebase: `git push --force-with-lease fork cr8806:main`.
 - Upstream: `https://github.com/openwrt/openwrt.git` nhánh `main` (remote `origin`).
 - PR smallbuffers: `https://github.com/hzyitc/openwrt-redmi-ax3000.git`, nhánh
@@ -211,11 +211,11 @@ public nên không tính phí.
 
 Chỉ build để thử (không tạo Release):
 ```bash
-gh workflow run cr8806.yml -R fanha99/cr8806-dump-ap
-gh run watch -R fanha99/cr8806-dump-ap
+gh workflow run cr8806.yml -R fanha99/openwrt-xiaomi-cr8806
+gh run watch -R fanha99/openwrt-xiaomi-cr8806
 ```
 Sau khi chạy xong, file nằm ở mục **Artifacts** của lần chạy đó (trên web) hoặc
-tải bằng `gh run download <run-id> -R fanha99/cr8806-dump-ap`.
+tải bằng `gh run download <run-id> -R fanha99/openwrt-xiaomi-cr8806`.
 
 Build rồi tạo Release (tên tag phải bắt đầu bằng `cr8806-`):
 ```bash
@@ -229,7 +229,7 @@ Upload bản build trên máy (không cần chờ GitHub build):
 ```bash
 cd bin/cr8806
 cat ap/sha256sums router/sha256sums > sha256sums
-gh release create cr8806-2026.10.23 -R fanha99/cr8806-dump-ap \
+gh release create cr8806-2026.10.23 -R fanha99/openwrt-xiaomi-cr8806 \
   --title "CR8806 2026.10.23" --notes "Xem cr8806/README.md" \
   ap/*cr8806* router/*cr8806* sha256sums
 ```
@@ -239,7 +239,7 @@ Build Toolchains, LLM Review...). Chúng tự chạy khi push, vừa lâu vừa 
 Tắt chúng trong **Actions**: chọn từng workflow > `...` > **Disable workflow**,
 chỉ giữ `CR8806 build`. Có thể tắt tất cả bằng lệnh:
 ```bash
-R=fanha99/cr8806-dump-ap
+R=fanha99/openwrt-xiaomi-cr8806
 gh workflow list -R $R --json name,id --jq '.[] | select(.name != "CR8806 build") | .id' |
   xargs -n1 gh workflow disable -R $R
 ```
