@@ -136,28 +136,24 @@ mtd20 overlay, mtd21 data
    - `uboot-envtools`: `0:appsblenv` và `bdata` (offset 0, size 0x10000, sector 0x20000).
 5. `cr8806: …` – thư mục `cr8806/` (cấu hình build, script, tài liệu này).
 
-### Cổng wan đi qua eth1 (eth0 không lên link)
-Thiết kế gốc (giống Redmi AX5400): gmac0 (eth0) → GE-PHY SoC → PHY4 của QCA8337 → cổng `wan`.
-Trên CR8806 đường này **không bao giờ lên link** (`eth0` carrier = 0). Đọc bằng mdio-tools:
-PHY4 (mdio `90000.mdio-1` addr 4, ID 004d.d036) reg 9 = 0x0400, tức không quảng bá 1000BASE-T FD.
-Ghi tay reg 9 = 0x0600 + reg 0 = 0x3300 thì eth0 lên 1 Gbps, nên lỗi nằm ở bước
-autoneg/phylink của PHY4, chưa tìm ra gốc.
+### Cổng wan đi qua eth1 (và vì sao eth0 không lên link)
+Thiết kế gốc (giống Redmi AX5400): gmac0 (eth0) → GE-PHY của SoC → dây nội bộ → PHY4 của QCA8337 →
+cổng `wan`. Hai PHY này nối thẳng với nhau (PHY-to-PHY) nên **cả hai phải quảng bá 1000BASE-T**.
 
-Kết quả điều tra thêm (kernel 6.18.55, `mdio-tools` để đọc/ghi thanh ghi):
-- Sau cold boot: PHY0–3 reg 9 = 0x0600 (quảng bá 1000FD), **chỉ PHY4 = 0x0400**. Reg 15 của PHY4 = 0x2000
-  (PHY có khả năng 1000T FD), nên không phải phần cứng thiếu.
-- Reset mềm PHY4 (`mdio 90000.mdio-1 phy 4 raw 0 0x9140`) → reg 9 = 0x0600 và eth0 lên 1 Gbps ngay.
-- `echo 90000.mdio-1:11 > /sys/bus/mdio_bus/drivers/qca8k/unbind` rồi `bind` lại → driver ghi đúng
-  reg 9 = 0x0600 (kể cả khi đặt tay 0x0400 trước), eth0 lên 1 Gbps. Tức code phylink/qca83xx đúng ở
-  lần attach thứ 2; chỉ lần attach đầu lúc boot (2.12s) là sai.
-- eth0 phải được `ip link set eth0 up` thì GE-PHY mới attach (reg 9 = 0x0200); nếu không có `wan`/conduit
-  nào dùng eth0 thì nó luôn down.
-- Chưa loại trừ: `phydev->supported/advertising` lúc `phy_probe` của PHY4 thiếu 1000FD (đọc reg ngay sau
-  reset GPIO `mdio1`), hoặc thứ tự probe. Bước tiếp theo: build kernel có printk ở `phy_probe`,
-  `genphy_config_advert`, `phylink_bringup_phy` cho PHY 90000.mdio-1:04, hoặc thêm `reset-post-delay-us`
-  cho `&mdio1` rồi thử. Cách né: `02_network` cho `wan` đi qua `eth1`
-(SGMII) như lan1-3; `wan` dùng chung đường 1 Gbps với lan1-3. Đã thử trên máy thật: wan link,
-SSH, dnsmasq cấp trên Tech OK. Pz-l8 và Redmi AX5400 không đổi.
+**Nguyên nhân (đã kiểm chứng bằng mdio-tools + kernel có printk):** lúc boot PHY4 bắt đầu autoneg
+(~2s) nhưng `eth0` còn down, GE-PHY của SoC chưa được driver gắn (reg 9 = 0) nên không quảng bá 1G.
+Khoảng 13 giây sau, PHY4 tự bỏ quảng bá 1000 (reg 9: 0x0600 → 0x0400). Đây là hành vi phần cứng, kernel
+không ghi gì (đã dò mọi lần ghi reg 9 qua MDIO bus). Từ đó `eth0` có lên cũng chỉ thương lượng được
+10/100 và thực tế không có carrier. Hệ quả: nếu `eth0` được mở **trước ~13s** thì mọi thứ chạy bình thường;
+mở sau thì mất. Ghi lại reg 9 = 0x0600 + restart autoneg, reset mềm PHY4, hoặc unbind/bind `qca8k` đều
+khôi phục.
+- Bit 5 của reg 0x14 trên QCA8337 PHY là bit chỉ đọc (khác AR8035), không phải công tắc SmartSpeed, nên
+  không sửa được bằng cách tắt nó trong `qca83xx_config_init`.
+- Kiểm chứng: hook preinit `ip link set eth0 up` lúc ~5s → eth0 lên 1 Gbps ngay, reg 9 giữ 0x0600.
+
+**Cách xử lý đang dùng:** `02_network` cho `wan` đi qua `eth1` (SGMII) như lan1-3, nên không phụ thuộc
+thời điểm mở eth0. wan dùng chung đường 1 Gbps với lan1-3. Pz-l8 và Redmi AX5400 không đổi.
+Muốn trả wan về eth0 thì phải đảm bảo `eth0` được mở sớm (preinit) trước khi PHY4 bỏ 1G.
 
 ### sysupgrade và dual-boot
 `platform.sh` ghi firmware mới vào **đúng slot đang chạy** (đọc `ubi.mtd=` trong
