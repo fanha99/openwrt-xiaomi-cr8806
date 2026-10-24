@@ -131,7 +131,7 @@ mtd20 overlay, mtd21 data
      trong `src/` được đóng gói lại (ath11k-bdencoder) từ BDF M79 (id 16) và
      QCN6102 (id 96) với tên `bus=ahb,qmi-chip-id=0,qmi-board-id=255,variant=Xiaomi-CR8806`
      (firmware mainline báo board-id 255).
-   - `base-files`: 02_network (lan1-3 + wan, tất cả conduit eth1), 01_leds,
+   - `base-files`: 02_network (lan1-3 conduit eth1, wan conduit eth0), preinit 05_cr8806_eth0_up, 01_leds,
      caldata hotplug (`0:art` @0x1000 / @0x26800), sysupgrade.
    - `uboot-envtools`: `0:appsblenv` và `bdata` (offset 0, size 0x10000, sector 0x20000).
 5. `cr8806: …` – thư mục `cr8806/` (cấu hình build, script, tài liệu này).
@@ -151,9 +151,10 @@ khôi phục.
   không sửa được bằng cách tắt nó trong `qca83xx_config_init`.
 - Kiểm chứng: hook preinit `ip link set eth0 up` lúc ~5s → eth0 lên 1 Gbps ngay, reg 9 giữ 0x0600.
 
-**Cách xử lý đang dùng:** `02_network` cho `wan` đi qua `eth1` (SGMII) như lan1-3, nên không phụ thuộc
-thời điểm mở eth0. wan dùng chung đường 1 Gbps với lan1-3. Pz-l8 và Redmi AX5400 không đổi.
-Muốn trả wan về eth0 thì phải đảm bảo `eth0` được mở sớm (preinit) trước khi PHY4 bỏ 1G.
+**Cách xử lý đang dùng (nhánh `cr8806-wan-eth0`):** giữ thiết kế gốc, `wan` dùng conduit `eth0`, và hook
+preinit `05_cr8806_eth0_up` mở `eth0` ngay lúc ~5s (trước mốc ~13s). Sau khi `eth0` đã mở một lần thì tắt/bật
+lại bao lâu cũng không mất 1G (đã thử tắt 40s). Nhánh `cr8806-wan-eth1` là phương án thay thế: cho `wan`
+đi qua `eth1` như lan1-3, không cần hook nhưng dùng chung đường 1 Gbps.
 
 ### sysupgrade và dual-boot
 `platform.sh` ghi firmware mới vào **đúng slot đang chạy** (đọc `ubi.mtd=` trong
