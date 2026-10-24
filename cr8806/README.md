@@ -131,10 +131,19 @@ mtd20 overlay, mtd21 data
      trong `src/` được đóng gói lại (ath11k-bdencoder) từ BDF M79 (id 16) và
      QCN6102 (id 96) với tên `bus=ahb,qmi-chip-id=0,qmi-board-id=255,variant=Xiaomi-CR8806`
      (firmware mainline báo board-id 255).
-   - `base-files`: 02_network (lan1-3 + wan, conduit eth1/eth0), 01_leds,
+   - `base-files`: 02_network (lan1-3 + wan, tất cả conduit eth1), 01_leds,
      caldata hotplug (`0:art` @0x1000 / @0x26800), sysupgrade.
    - `uboot-envtools`: `0:appsblenv` và `bdata` (offset 0, size 0x10000, sector 0x20000).
 5. `cr8806: …` – thư mục `cr8806/` (cấu hình build, script, tài liệu này).
+
+### Cổng wan đi qua eth1 (eth0 không lên link)
+Thiết kế gốc (giống Redmi AX5400): gmac0 (eth0) → GE-PHY SoC → PHY4 của QCA8337 → cổng `wan`.
+Trên CR8806 đường này **không bao giờ lên link** (`eth0` carrier = 0). Đọc bằng mdio-tools:
+PHY4 (mdio `90000.mdio-1` addr 4, ID 004d.d036) reg 9 = 0x0400, tức không quảng bá 1000BASE-T FD.
+Ghi tay reg 9 = 0x0600 + reg 0 = 0x3300 thì eth0 lên 1 Gbps, nên lỗi nằm ở bước
+autoneg/phylink của PHY4, chưa tìm ra gốc. Cách né: `02_network` cho `wan` đi qua `eth1`
+(SGMII) như lan1-3; `wan` dùng chung đường 1 Gbps với lan1-3. Đã thử trên máy thật: wan link,
+SSH, dnsmasq cấp trên Tech OK. Pz-l8 và Redmi AX5400 không đổi.
 
 ### sysupgrade và dual-boot
 `platform.sh` ghi firmware mới vào **đúng slot đang chạy** (đọc `ubi.mtd=` trong
